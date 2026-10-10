@@ -43,12 +43,30 @@
         "createdAt": { "type": "string", "maxLength": 50 }
       },
       "required": ["uid", "email"]
+    },
+    "ChatMessage": {
+      "title": "Chat Message",
+      "description": "User question or AI answer in the tender conversation history",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "tenderId": { "type": "string" },
+        "sender": { "type": "string", "enum": ["user", "assistant"] },
+        "text": { "type": "string", "maxLength": 10000 },
+        "timestamp": { "type": "string", "maxLength": 50 },
+        "sources": { "type": "array" }
+      },
+      "required": ["id", "tenderId", "sender", "text", "timestamp"]
     }
   },
   "firestore": {
     "/tenders/{tenderId}": {
       "schema": { "$ref": "#/entities/Tender" },
       "description": "Collection of private tenders isolated by ownerUid"
+    },
+    "/tenders/{tenderId}/messages/{messageId}": {
+      "schema": { "$ref": "#/entities/ChatMessage" },
+      "description": "Private conversation messages scoped to tender owner"
     },
     "/users/{userId}": {
       "schema": { "$ref": "#/entities/UserProfile" },

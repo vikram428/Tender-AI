@@ -28,6 +28,7 @@ export type AppPage =
   | 'estimator'
   | 'deadlines'
   | 'clauses'
+  | 'chat-with-tender'
   | 'search'
   | 'comparison'
   | 'drafts'

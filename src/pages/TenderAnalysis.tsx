@@ -53,6 +53,12 @@ export const TenderAnalysis: React.FC = () => {
 
         <div className="flex items-center gap-2">
           <button
+            onClick={() => setCurrentPage('chat-with-tender')}
+            className="px-3 py-1.5 text-xs font-semibold text-cyan-200 bg-cyan-950/70 hover:bg-cyan-900/80 border border-cyan-700/60 rounded transition-colors whitespace-nowrap flex items-center gap-1.5"
+          >
+            <span>Chat with Tender</span>
+          </button>
+          <button
             onClick={() => setCurrentPage('estimator')}
             className="px-3 py-1.5 text-xs font-semibold text-slate-950 bg-amber-400 hover:bg-amber-300 rounded transition-colors whitespace-nowrap"
           >

@@ -14,7 +14,8 @@ import {
   Printer,
   Settings,
   HardHat,
-  RotateCcw
+  RotateCcw,
+  MessageSquareText
 } from 'lucide-react';
 
 interface NavItem {
@@ -32,7 +33,8 @@ const NAV_ITEMS: NavItem[] = [
   { id: 'estimator', label: 'Budget Estimator', icon: Calculator },
   { id: 'deadlines', label: 'Deadline Tracker', icon: CalendarClock },
   { id: 'clauses', label: 'Clause Explorer', icon: Scale },
-  { id: 'search', label: 'Document Search', icon: Search, section: 'Tools & Intelligence' },
+  { id: 'chat-with-tender', label: 'Chat with Tender', icon: MessageSquareText, section: 'Tools & Intelligence' },
+  { id: 'search', label: 'Document Search', icon: Search },
   { id: 'comparison', label: 'Tender Comparison', icon: GitCompare },
   { id: 'drafts', label: 'Draft Generator', icon: FileEdit },
   { id: 'reports', label: 'Reports & Export', icon: Printer },

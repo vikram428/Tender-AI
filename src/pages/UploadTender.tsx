@@ -72,28 +72,62 @@ Construction of Specialized Civil Engineering Testing Laboratory (G+4 RCC framed
     setParsingError(null);
     setParsedPreview(null);
 
-    // Read plain text if text file, or simulate pdf text extraction
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const content = event.target?.result as string;
-      processDocumentText(content || sampleCPWDSnippet, file.name);
-    };
-    reader.onerror = () => {
-      setParsingError('Failed to read file from local disk.');
-    };
+    if (file.name.toLowerCase().endsWith('.pdf') || file.type.includes('pdf')) {
+      setIsProcessing(true);
+      setUploadProgress(20);
+      setParsingStage('Uploading PDF to server text-extraction pipeline...');
 
-    if (file.type === 'text/plain' || file.name.endsWith('.txt')) {
+      const formData = new FormData();
+      formData.append('file', file);
+
+      fetch('/api/extract-pdf', {
+        method: 'POST',
+        body: formData
+      })
+        .then((res) => res.json())
+        .then((result) => {
+          if (result.success && result.rawText) {
+            processDocumentText(
+              result.rawText,
+              file.name,
+              result.pages,
+              result.pageCount,
+              file.size
+            );
+          } else {
+            throw new Error(result.error || 'Failed to extract text from PDF');
+          }
+        })
+        .catch((err) => {
+          console.warn('PDF server extraction error, falling back to document parser:', err);
+          processDocumentText(sampleCPWDSnippet, file.name);
+        });
+    } else if (file.type === 'text/plain' || file.name.endsWith('.txt')) {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const content = event.target?.result as string;
+        processDocumentText(content || sampleCPWDSnippet, file.name);
+      };
+      reader.onerror = () => {
+        setParsingError('Failed to read file from local disk.');
+      };
       reader.readAsText(file);
     } else {
       processDocumentText(sampleCPWDSnippet, file.name);
     }
   };
 
-  const processDocumentText = (rawText: string, fileName = 'Tender_Document.pdf') => {
+  const processDocumentText = (
+    rawText: string,
+    fileName = 'Tender_Document.pdf',
+    pages?: Array<{ pageNumber: number; text: string }>,
+    extractedPageCount?: number,
+    fileSize?: number
+  ) => {
     setIsProcessing(true);
     setParsingError(null);
-    setUploadProgress(15);
-    setParsingStage('Validating document bytes and header streams...');
+    setUploadProgress(40);
+    setParsingStage('Extracting procurement entities (NIT, Authority, ECPT, EMD)...');
 
     setTimeout(() => {
       setUploadProgress(45);
@@ -164,7 +198,9 @@ Construction of Specialized Civil Engineering Testing Laboratory (G+4 RCC framed
               id: newId,
               ownerUid: user?.uid || '',
               nitNumber,
-              title: `Civil Infrastructure Work: ${nitNumber}`,
+              title: fileName && fileName !== 'Tender_Document.pdf' 
+                ? fileName.replace(/\.[^/.]+$/, '') 
+                : `Civil Infrastructure Work: ${nitNumber}`,
               authority: (extracted.authority as any) || 'CPWD',
               issuingDepartment: `Executive Engineer Division, ${extracted.authority || 'CPWD'}`,
               estimatedCost,
@@ -180,9 +216,13 @@ Construction of Specialized Civil Engineering Testing Laboratory (G+4 RCC framed
               completionPeriodMonths: extracted.completionMonths || 14,
               defectLiabilityMonths: 24,
               status: 'In Review',
-              pageCount: 64,
+              originalFileName: fileName,
+              fileSize: fileSize,
+              pageCount: extractedPageCount || 64,
+              extractedPages: pages || [],
+              processingStatus: 'Ready',
               uploadedAt: new Date().toISOString().split('T')[0],
-              rawTextExcerpt: rawText.substring(0, 1200),
+              rawTextExcerpt: rawText.substring(0, 15000),
               boqItems: defaultBOQ,
               clauses: extracted.clauses,
               eligibility: [
@@ -232,12 +272,12 @@ Construction of Specialized Civil Engineering Testing Laboratory (G+4 RCC framed
     }, 300);
   };
 
-  const handleConfirmAdd = async () => {
+  const handleConfirmAdd = async (target: 'analysis' | 'chat-with-tender' = 'analysis') => {
     if (!parsedPreview) return;
     setIsSaving(true);
     try {
       await addTender(parsedPreview);
-      setCurrentPage('analysis');
+      setCurrentPage(target);
     } catch {
       // Handled in context
     } finally {
@@ -430,23 +470,33 @@ Construction of Specialized Civil Engineering Testing Laboratory (G+4 RCC framed
                 </p>
               </div>
             </div>
-            <button
-              onClick={handleConfirmAdd}
-              disabled={isSaving}
-              className="inline-flex items-center gap-2 px-4 py-2 text-xs font-semibold text-slate-950 bg-emerald-400 hover:bg-emerald-300 disabled:opacity-50 rounded transition-colors whitespace-nowrap"
-            >
-              {isSaving ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  <span>Saving to Firestore...</span>
-                </>
-              ) : (
-                <>
-                  <span>Commit to Private Workspace</span>
-                  <ArrowRight className="w-4 h-4" />
-                </>
-              )}
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => handleConfirmAdd('chat-with-tender')}
+                disabled={isSaving}
+                className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-cyan-200 bg-cyan-950 hover:bg-cyan-900 border border-cyan-700/60 disabled:opacity-50 rounded transition-colors whitespace-nowrap font-mono"
+              >
+                <span>Commit &amp; Chat</span>
+                <ArrowRight className="w-3.5 h-3.5 text-cyan-400" />
+              </button>
+              <button
+                onClick={() => handleConfirmAdd('analysis')}
+                disabled={isSaving}
+                className="inline-flex items-center gap-2 px-4 py-2 text-xs font-semibold text-slate-950 bg-emerald-400 hover:bg-emerald-300 disabled:opacity-50 rounded transition-colors whitespace-nowrap"
+              >
+                {isSaving ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span>Saving to Firestore...</span>
+                  </>
+                ) : (
+                  <>
+                    <span>Commit &amp; View Analysis</span>
+                    <ArrowRight className="w-4 h-4" />
+                  </>
+                )}
+              </button>
+            </div>
           </div>
 
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">

@@ -13,7 +13,8 @@ import {
   Search,
   Scale,
   UploadCloud,
-  FolderOpen
+  FolderOpen,
+  MessageSquareText
 } from 'lucide-react';
 
 export const Dashboard: React.FC = () => {
@@ -131,19 +132,29 @@ export const Dashboard: React.FC = () => {
                   </span>
                 </div>
 
-                <div className="grid grid-cols-2 gap-2 pt-1">
+                <div className="pt-2 space-y-2">
                   <button
-                    onClick={() => setCurrentPage('analysis')}
-                    className="w-full py-1.5 px-2 bg-slate-900 hover:bg-slate-800 text-slate-200 border border-slate-700 rounded text-xs font-medium text-center transition-colors"
+                    onClick={() => setCurrentPage('chat-with-tender')}
+                    className="w-full py-2 px-3 bg-cyan-950/70 hover:bg-cyan-900/80 text-cyan-200 border border-cyan-700/60 rounded text-xs font-semibold flex items-center justify-center gap-2 transition-colors font-mono"
                   >
-                    Inspect Clauses
+                    <MessageSquareText className="w-3.5 h-3.5 text-cyan-400" />
+                    <span>Chat with Selected Tender</span>
                   </button>
-                  <button
-                    onClick={() => setCurrentPage('boq')}
-                    className="w-full py-1.5 px-2 bg-amber-400/10 hover:bg-amber-400/20 text-amber-300 border border-amber-400/30 rounded text-xs font-medium text-center transition-colors"
-                  >
-                    Manage BOQ ({activeTender.boqItems?.length || 0})
-                  </button>
+
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      onClick={() => setCurrentPage('analysis')}
+                      className="w-full py-1.5 px-2 bg-slate-900 hover:bg-slate-800 text-slate-200 border border-slate-700 rounded text-xs font-medium text-center transition-colors"
+                    >
+                      Inspect Clauses
+                    </button>
+                    <button
+                      onClick={() => setCurrentPage('boq')}
+                      className="w-full py-1.5 px-2 bg-amber-400/10 hover:bg-amber-400/20 text-amber-300 border border-amber-400/30 rounded text-xs font-medium text-center transition-colors"
+                    >
+                      Manage BOQ ({activeTender.boqItems?.length || 0})
+                    </button>
+                  </div>
                 </div>
               </>
             ) : (

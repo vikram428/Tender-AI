@@ -61,6 +61,18 @@ service cloud.firestore {
         && isValidId(tenderId)
         && existing().ownerUid == request.auth.uid
         && incoming().ownerUid == existing().ownerUid;
+
+      // Chat Messages Subcollection for Private Conversation History
+      match /messages/{messageId} {
+        allow read, write: if isSignedIn() && isValidId(tenderId) && isValidId(messageId)
+          && get(/databases/$(database)/documents/tenders/$(tenderId)).data.ownerUid == request.auth.uid;
+      }
+
+      // Chunks Subcollection for RAG Embeddings & Extracted Text
+      match /chunks/{chunkId} {
+        allow read, write: if isSignedIn() && isValidId(tenderId) && isValidId(chunkId)
+          && get(/databases/$(database)/documents/tenders/$(tenderId)).data.ownerUid == request.auth.uid;
+      }
     }
   }
 }

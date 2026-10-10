@@ -116,12 +116,35 @@ export interface TenderDocument {
   status: 'In Review' | 'Bidding' | 'Under Evaluation' | 'Awarded' | 'Archived';
   pageCount: number;
   rawTextExcerpt?: string;
+  originalFileName?: string;
+  fileSize?: number;
+  processingStatus?: 'Uploading' | 'Processing' | 'Ready' | 'Failed';
+  processingError?: string;
+  storagePath?: string;
+  extractedPages?: Array<{ pageNumber: number; text: string }>;
   boqItems: BOQItem[];
   clauses: ContractClause[];
   eligibility: EligibilityCriterion[];
   deadlines: TenderDeadline[];
   budgetCalculation?: BudgetCostBreakdown;
   uploadedAt: string;
+}
+
+export interface ChatSourceReference {
+  pageNumber: number;
+  excerpt: string;
+  relevanceScore?: number;
+  clauseTitle?: string;
+}
+
+export interface ChatMessage {
+  id: string;
+  tenderId: string;
+  sender: 'user' | 'assistant';
+  text: string;
+  timestamp: string;
+  sources?: ChatSourceReference[];
+  confidence?: 'grounded' | 'not_found' | 'inconclusive';
 }
 
 export interface TenderDraftTemplate {

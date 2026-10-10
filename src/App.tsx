@@ -21,6 +21,7 @@ import { TenderComparison } from './pages/TenderComparison';
 import { DraftGenerator } from './pages/DraftGenerator';
 import { Reports } from './pages/Reports';
 import { Settings } from './pages/Settings';
+import { ChatWithTender } from './pages/ChatWithTender';
 import { X, CheckCircle2, AlertCircle, Info, Loader2, HardHat } from 'lucide-react';
 
 const AppContent: React.FC = () => {
@@ -104,6 +105,7 @@ const AppContent: React.FC = () => {
             {currentPage === 'estimator' && <BudgetEstimator />}
             {currentPage === 'deadlines' && <DeadlineTracker />}
             {currentPage === 'clauses' && <ClauseExplorer />}
+            {currentPage === 'chat-with-tender' && <ChatWithTender />}
             {currentPage === 'search' && <DocumentSearch />}
             {currentPage === 'comparison' && <TenderComparison />}
             {currentPage === 'drafts' && <DraftGenerator />}
