@@ -1,0 +1,58 @@
+{
+  "entities": {
+    "Tender": {
+      "title": "Tender Document",
+      "description": "A civil engineering tender document owned by a specific contractor/user",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "ownerUid": { "type": "string", "description": "Firebase Auth UID of the owner" },
+        "nitNumber": { "type": "string", "maxLength": 100 },
+        "title": { "type": "string", "maxLength": 500 },
+        "authority": { "type": "string", "maxLength": 100 },
+        "issuingDepartment": { "type": "string", "maxLength": 300 },
+        "estimatedCost": { "type": "number" },
+        "currency": { "type": "string", "maxLength": 10 },
+        "emdAmount": { "type": "number" },
+        "tenderFee": { "type": "number" },
+        "bidSecurityType": { "type": "string", "maxLength": 100 },
+        "publicationDate": { "type": "string", "maxLength": 30 },
+        "submissionDeadline": { "type": "string", "maxLength": 30 },
+        "preBidMeetingDate": { "type": "string", "maxLength": 30 },
+        "technicalBidOpeningDate": { "type": "string", "maxLength": 30 },
+        "workLocation": { "type": "string", "maxLength": 300 },
+        "completionPeriodMonths": { "type": "number" },
+        "defectLiabilityMonths": { "type": "number" },
+        "status": { "type": "string", "maxLength": 50 },
+        "pageCount": { "type": "number" },
+        "rawTextExcerpt": { "type": "string", "maxLength": 50000 },
+        "createdAt": { "type": "string", "maxLength": 50 },
+        "updatedAt": { "type": "string", "maxLength": 50 }
+      },
+      "required": ["ownerUid", "nitNumber", "title", "estimatedCost"]
+    },
+    "UserProfile": {
+      "title": "User Profile",
+      "description": "User account profile and organization preferences",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "email": { "type": "string", "maxLength": 200 },
+        "displayName": { "type": "string", "maxLength": 150 },
+        "organizationName": { "type": "string", "maxLength": 200 },
+        "createdAt": { "type": "string", "maxLength": 50 }
+      },
+      "required": ["uid", "email"]
+    }
+  },
+  "firestore": {
+    "/tenders/{tenderId}": {
+      "schema": { "$ref": "#/entities/Tender" },
+      "description": "Collection of private tenders isolated by ownerUid"
+    },
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/UserProfile" },
+      "description": "Private user account settings and profile"
+    }
+  }
+}

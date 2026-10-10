@@ -1,0 +1,6 @@
+{
+  "name": "TenderAI: Construction Tender Document Assistant",
+  "description": "Professional civil engineering tender analysis and BOQ estimating assistant with rule-based extraction, deterministic calculations, and contract clause compliance.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
