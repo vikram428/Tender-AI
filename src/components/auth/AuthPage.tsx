@@ -63,19 +63,67 @@ export const AuthPage: React.FC = () => {
           </p>
         </div>
 
-        {/* Error Alert */}
+        {/* Error Alert with Actionable Help */}
         {authError && (
-          <div className="p-3 bg-rose-950/40 border border-rose-800/60 rounded-lg text-xs text-rose-300 flex items-start gap-2.5">
-            <AlertCircle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
-            <div className="flex-1">
-              <span>{authError}</span>
+          <div className="p-3.5 bg-rose-950/40 border border-rose-800/60 rounded-lg text-xs text-rose-300 space-y-3">
+            <div className="flex items-start justify-between gap-2.5">
+              <div className="flex items-start gap-2.5 flex-1">
+                <AlertCircle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
+                <div className="flex-1">
+                  <span className="font-semibold block text-rose-200">
+                    {authError.includes('Firebase') || authError.includes('operation-not-allowed')
+                      ? 'Firebase Provider Setup Notice'
+                      : 'Authentication Notice'}
+                  </span>
+                  <span className="leading-relaxed mt-0.5 block text-slate-300 text-[11px]">{authError}</span>
+                </div>
+              </div>
               <button 
+                type="button"
                 onClick={clearAuthError}
-                className="text-[11px] underline block mt-0.5 text-rose-400 hover:text-rose-200"
+                aria-label="Close notification"
+                className="text-slate-400 hover:text-slate-200 p-1 rounded hover:bg-slate-800 transition-colors shrink-0"
+                title="Close"
               >
-                Dismiss
+                <span className="text-sm font-bold leading-none">&times;</span>
               </button>
             </div>
+
+            {/* If operation-not-allowed or not enabled, give direct resolution */}
+            {(authError.includes('operation-not-allowed') || authError.includes('not enabled') || authError.includes('not yet enabled')) && (
+              <div className="p-3 bg-slate-900/90 border border-amber-500/30 rounded text-[11px] text-slate-300 space-y-2.5">
+                <div className="text-amber-400 font-semibold flex items-center gap-1.5 font-mono">
+                  <span>HOW TO ENABLE IN FIREBASE (1-TIME SETUP):</span>
+                </div>
+                
+                <ol className="text-slate-300 space-y-1 list-decimal list-inside text-[11px]">
+                  <li>Open the Firebase Authentication console below</li>
+                  <li>Click on <strong className="text-amber-300">Email/Password</strong> under Sign-in providers</li>
+                  <li>Toggle the <strong className="text-amber-300">Enable</strong> switch to ON and click <strong className="text-amber-300">Save</strong></li>
+                  <li>Come back here and click Create Account again</li>
+                </ol>
+
+                <div className="pt-1 flex flex-col gap-2">
+                  <a
+                    href="https://console.firebase.google.com/project/gold-rope-6mzf6/authentication/providers"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="w-full py-2 px-3 bg-cyan-600 hover:bg-cyan-500 text-white font-semibold rounded text-xs text-center transition-colors flex items-center justify-center gap-1.5"
+                  >
+                    <span>Open Firebase Console Sign-In Providers</span>
+                    <span className="text-xs">↗</span>
+                  </a>
+
+                  <button
+                    type="button"
+                    onClick={handleGoogle}
+                    className="w-full py-1.5 px-3 bg-amber-400 hover:bg-amber-300 text-slate-950 font-bold rounded text-xs transition-colors"
+                  >
+                    Or Sign In with Google (Active &amp; Working Now)
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
@@ -138,6 +186,15 @@ export const AuthPage: React.FC = () => {
           </button>
         </div>
 
+        {mode === 'signup' && (
+          <div className="p-2.5 rounded bg-cyan-950/30 border border-cyan-800/50 text-[11px] text-cyan-300 flex items-start gap-2">
+            <span className="text-cyan-400 font-bold shrink-0">ℹ</span>
+            <span className="leading-tight">
+              <strong>Quick Note:</strong> Google Sign-In is pre-activated and works instantly. To register with custom email/password, ensure the Email/Password provider is enabled in your Firebase Console.
+            </span>
+          </div>
+        )}
+
         {/* Email & Password Form */}
         <form onSubmit={handleSubmit} className="space-y-3.5 text-xs">
           {mode === 'signup' && (
@@ -173,9 +230,12 @@ export const AuthPage: React.FC = () => {
           </div>
 
           <div>
-            <label className="text-[11px] font-mono text-slate-400 block mb-1">
-              PASSWORD
-            </label>
+            <div className="flex items-center justify-between mb-1">
+              <label className="text-[11px] font-mono text-slate-400">
+                PASSWORD
+              </label>
+              <span className="text-[10px] text-slate-500 font-mono">Min 6 characters</span>
+            </div>
             <div className="relative">
               <Lock className="w-3.5 h-3.5 text-slate-500 absolute left-3 top-3" />
               <input

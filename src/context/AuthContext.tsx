@@ -23,7 +23,8 @@ interface AuthContextType {
   signUpWithEmail: (email: string, pass: string, displayName?: string) => Promise<void>;
   logout: () => Promise<void>;
   authError: string | null;
-  setAuthError: (err: string | null) => void;
+  authErrorCode: string | null;
+  setAuthError: (err: string | null, code?: string | null) => void;
   clearAuthError: () => void;
 }
 
@@ -33,6 +34,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [authError, setAuthError] = useState<string | null>(null);
+  const [authErrorCode, setAuthErrorCode] = useState<string | null>(null);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
@@ -43,7 +45,15 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     return () => unsubscribe();
   }, []);
 
-  const clearAuthError = () => setAuthError(null);
+  const clearAuthError = () => {
+    setAuthError(null);
+    setAuthErrorCode(null);
+  };
+
+  const setExplicitError = (err: string | null, code: string | null = null) => {
+    setAuthError(err);
+    setAuthErrorCode(code);
+  };
 
   const signInWithGoogle = async () => {
     clearAuthError();
@@ -51,10 +61,12 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       await signInWithPopup(auth, googleProvider);
     } catch (err: any) {
       console.error('Google Sign-in error:', err);
-      if (err.code === 'auth/popup-closed-by-user') {
-        setAuthError('Sign-in cancelled (popup was closed).');
-      } else if (err.code === 'auth/popup-blocked') {
-        setAuthError('Sign-in popup was blocked by browser. Please allow popups.');
+      const code = err.code || '';
+      setAuthErrorCode(code);
+      if (code === 'auth/popup-closed-by-user') {
+        setAuthError('Sign-in cancelled: The Google popup window was closed before completing sign-in.');
+      } else if (code === 'auth/popup-blocked') {
+        setAuthError('Sign-in popup was blocked by your browser. Please allow popups for this site and try again.');
       } else {
         setAuthError(err.message || 'Failed to authenticate with Google.');
       }
@@ -64,16 +76,32 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const signInWithEmail = async (email: string, pass: string) => {
     clearAuthError();
+    const sanitizedEmail = email.trim();
+    if (!sanitizedEmail) {
+      setExplicitError('Please enter a valid email address.', 'validation/empty-email');
+      return;
+    }
+    if (!pass) {
+      setExplicitError('Please enter your password.', 'validation/empty-password');
+      return;
+    }
+
     try {
-      await signInWithEmailAndPassword(auth, email, pass);
+      await signInWithEmailAndPassword(auth, sanitizedEmail, pass);
     } catch (err: any) {
       console.error('Email login error:', err);
-      if (err.code === 'auth/user-not-found' || err.code === 'auth/wrong-password' || err.code === 'auth/invalid-credential') {
-        setAuthError('Invalid email or password. Please verify credentials.');
-      } else if (err.code === 'auth/invalid-email') {
-        setAuthError('Invalid email address format.');
+      const code = err.code || '';
+      setAuthErrorCode(code);
+      if (code === 'auth/operation-not-allowed') {
+        setAuthError('Email/Password provider is not yet enabled in this Firebase project. You can enable it in the Firebase Console or continue with Google Sign-in.');
+      } else if (code === 'auth/user-not-found' || code === 'auth/wrong-password' || code === 'auth/invalid-credential') {
+        setAuthError('Invalid email or password. Please verify your credentials or use "Continue with Google".');
+      } else if (code === 'auth/invalid-email') {
+        setAuthError('The email address entered is not valid.');
+      } else if (code === 'auth/too-many-requests') {
+        setAuthError('Access temporarily blocked due to multiple failed attempts. Please wait a moment or sign in with Google.');
       } else {
-        setAuthError(err.message || 'Authentication failed.');
+        setAuthError(err.message || 'Authentication failed. Please verify your credentials.');
       }
       throw err;
     }
@@ -81,19 +109,35 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const signUpWithEmail = async (email: string, pass: string, displayName?: string) => {
     clearAuthError();
+    const sanitizedEmail = email.trim();
+    if (!sanitizedEmail) {
+      setExplicitError('Please enter a valid email address.', 'validation/empty-email');
+      return;
+    }
+    if (!pass || pass.length < 6) {
+      setExplicitError('Password must be at least 6 characters long.', 'auth/weak-password');
+      return;
+    }
+
     try {
-      const res = await createUserWithEmailAndPassword(auth, email, pass);
+      const res = await createUserWithEmailAndPassword(auth, sanitizedEmail, pass);
       if (displayName && res.user) {
         await updateProfile(res.user, { displayName });
       }
     } catch (err: any) {
       console.error('Email registration error:', err);
-      if (err.code === 'auth/email-already-in-use') {
-        setAuthError('An account with this email already exists. Please sign in.');
-      } else if (err.code === 'auth/weak-password') {
-        setAuthError('Password should be at least 6 characters.');
+      const code = err.code || '';
+      setAuthErrorCode(code);
+      if (code === 'auth/operation-not-allowed') {
+        setAuthError('Email/Password provider is not yet enabled in this Firebase project. To enable it, turn on "Email/Password" in Firebase Console, or use "Continue with Google" for instant access.');
+      } else if (code === 'auth/email-already-in-use') {
+        setAuthError('An account with this email already exists. Switch to "Sign In" tab or use "Continue with Google".');
+      } else if (code === 'auth/weak-password') {
+        setAuthError('Password is too weak. Please use at least 6 characters.');
+      } else if (code === 'auth/invalid-email') {
+        setAuthError('The email address format is invalid.');
       } else {
-        setAuthError(err.message || 'Registration failed.');
+        setAuthError(err.message || 'Registration failed. Please check the details and try again.');
       }
       throw err;
     }
@@ -105,7 +149,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       await signOut(auth);
     } catch (err: any) {
       console.error('Logout error:', err);
-      setAuthError('Failed to sign out.');
+      setExplicitError('Failed to sign out.', 'auth/logout-failed');
     }
   };
 
@@ -118,7 +162,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       signUpWithEmail,
       logout,
       authError,
-      setAuthError,
+      authErrorCode,
+      setAuthError: setExplicitError,
       clearAuthError
     }}>
       {children}
