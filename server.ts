@@ -26,13 +26,29 @@ const upload = multer({
   limits: { fileSize: 30 * 1024 * 1024 } // 30 MB max
 });
 
-// Helper for Gemini AI client
+// Helper for Gemini AI client with format validation and telemetry
 function getGeminiClient(): GoogleGenAI | null {
-  const apiKey = process.env.GEMINI_API_KEY;
+  const apiKey = (process.env.GEMINI_API_KEY || '').trim();
   if (!apiKey || apiKey === 'MY_GEMINI_API_KEY') {
     return null;
   }
-  return new GoogleGenAI({ apiKey });
+  // Validate that the token is a standard Google AI Studio key format
+  // OAuth access tokens (starting with AQ. or ya29.) or arbitrary text will be rejected
+  if (apiKey.startsWith('AQ.') || apiKey.startsWith('ya29.') || !apiKey.startsWith('AIza')) {
+    return null;
+  }
+  try {
+    return new GoogleGenAI({
+      apiKey,
+      httpOptions: {
+        headers: {
+          'User-Agent': 'aistudio-build'
+        }
+      }
+    });
+  } catch {
+    return null;
+  }
 }
 
 interface PageExtract {
@@ -101,8 +117,7 @@ function scoreChunkRelevance(query: string, chunkText: string): number {
   let score = 0;
   for (const token of qTokens) {
     if (textLower.includes(token)) {
-      score += 2;
-      // Bonus if matched multiple times
+      score += 2.5;
       const matches = textLower.split(token).length - 1;
       score += Math.min(matches, 4);
     }
@@ -112,10 +127,10 @@ function scoreChunkRelevance(query: string, chunkText: string): number {
   const domainSynonyms: Record<string, string[]> = {
     cost: ['cost', 'estimated cost', 'tender value', 'ecpt', 'crore', 'lakh', 'amount', 'inr', 'rs'],
     emd: ['emd', 'earnest money', 'deposit', 'bank guarantee', 'bid security', 'fdr'],
-    deadline: ['deadline', 'submission', 'last date', 'opening date', 'pre-bid', 'milestone', 'schedule'],
-    clause: ['clause', 'gcc', 'scc', 'compensation', 'liquidated damages', 'delay', 'penalty', 'escalation', '10ca', '10cc'],
-    boq: ['boq', 'bill of quantities', 'schedule', 'item', 'cum', 'sqm', 'quantity', 'rate', 'unit'],
-    eligibility: ['eligibility', 'turnover', 'experience', 'criteria', 'qualification', 'similar work', 'financial'],
+    deadline: ['deadline', 'submission', 'last date', 'opening date', 'pre-bid', 'milestone', 'schedule', 'date and time'],
+    clause: ['clause', 'gcc', 'scc', 'compensation', 'liquidated damages', 'delay', 'penalty', 'escalation', '10ca', '10cc', 'arbitration'],
+    boq: ['boq', 'bill of quantities', 'schedule of quantities', 'item', 'cum', 'sqm', 'quantity', 'rate', 'unit'],
+    eligibility: ['eligibility', 'turnover', 'experience', 'criteria', 'qualification', 'similar work', 'financial', 'class i'],
     duration: ['duration', 'completion', 'time allowed', 'months', 'days', 'period', 'schedule']
   };
 
@@ -123,13 +138,119 @@ function scoreChunkRelevance(query: string, chunkText: string): number {
     if (qTokens.some(t => t.includes(key))) {
       for (const syn of synonyms) {
         if (textLower.includes(syn)) {
-          score += 1.5;
+          score += 2.0;
         }
       }
     }
   }
 
   return score;
+}
+
+/**
+ * Grounded deterministic answer synthesis following TenderAI rules
+ */
+function synthesizeGroundedAnswer(
+  question: string,
+  topChunks: RankedChunk[],
+  tenderTitle?: string,
+  nitNumber?: string
+): string {
+  const qLower = question.toLowerCase();
+  const relevantChunks = topChunks.filter(c => c.score > 0);
+
+  if (relevantChunks.length === 0) {
+    return 'I could not find this information in the relevant sections of the uploaded tender.';
+  }
+
+  const primaryChunk = relevantChunks[0];
+  const primaryText = primaryChunk.text;
+  const pageNo = primaryChunk.pageNumber;
+
+  // 1. Estimated Cost
+  if (qLower.includes('cost') || qLower.includes('value') || qLower.includes('budget') || qLower.includes('amount') || qLower.includes('ecpt')) {
+    for (const chunk of relevantChunks) {
+      const costMatch = chunk.text.match(/(?:estimated\s*(?:project)?\s*cost|tender\s*value|ecpt|amount|approx\.?\s*cost)[\s:=-]+([^\n\r.]+)/i)
+        || chunk.text.match(/(?:₹|Rs\.?|INR)\s*[\d,]+(?:\s*(?:Crore|Lakh|Cr|L))?/i);
+      if (costMatch) {
+        return `Based on Page ${chunk.pageNumber} of the tender document, the estimated cost is:\n\n**${costMatch[0].trim()}**\n\nSupporting excerpt:\n> "${chunk.text.substring(0, 250).replace(/\n+/g, ' ')}..."`;
+      }
+    }
+    return 'I could not find this information in the relevant sections of the uploaded tender.';
+  }
+
+  // 2. EMD / Bid Security
+  if (qLower.includes('emd') || qLower.includes('earnest') || qLower.includes('bid security') || qLower.includes('security deposit')) {
+    for (const chunk of relevantChunks) {
+      const emdMatch = chunk.text.match(/(?:emd|earnest\s*money(?:\s*deposit)?|bid\s*security)[\s:=-]+([^\n\r.]+)/i)
+        || chunk.text.match(/(\d+(?:\.\d+)?%\s*(?:of\s*(?:the\s*)?estimated\s*cost)?)/i);
+      if (emdMatch) {
+        return `According to Page ${chunk.pageNumber}, the Earnest Money Deposit (EMD) / Bid Security requirement is:\n\n**${emdMatch[0].trim()}**\n\nSupporting excerpt:\n> "${chunk.text.substring(0, 250).replace(/\n+/g, ' ')}..."`;
+      }
+    }
+    return 'I could not find this information in the relevant sections of the uploaded tender.';
+  }
+
+  // 3. Submission Deadline / Dates
+  if (qLower.includes('deadline') || qLower.includes('submission') || qLower.includes('last date') || qLower.includes('opening') || qLower.includes('pre-bid')) {
+    for (const chunk of relevantChunks) {
+      const dateMatch = chunk.text.match(/(?:last\s*date|submission\s*deadline|bid\s*submission|opening\s*date|pre-bid)[\s:=-]+([^\n\r.]+)/i)
+        || chunk.text.match(/\b\d{1,2}[./-]\d{1,2}[./-]\d{2,4}\b/);
+      if (dateMatch) {
+        return `According to Page ${chunk.pageNumber}, the key deadline details are:\n\n**${dateMatch[0].trim()}**\n\nSupporting excerpt from Page ${chunk.pageNumber}:\n> "${chunk.text.substring(0, 250).replace(/\n+/g, ' ')}..."`;
+      }
+    }
+    return 'I could not find this information in the relevant sections of the uploaded tender.';
+  }
+
+  // 4. Eligibility Requirements
+  if (qLower.includes('eligibility') || qLower.includes('criteria') || qLower.includes('qualification') || qLower.includes('turnover') || qLower.includes('experience')) {
+    for (const chunk of relevantChunks) {
+      if (/eligib|turnover|experience|criteri|qualif|similar\s*work|class/i.test(chunk.text)) {
+        return `Based on the eligibility sections on Page ${chunk.pageNumber}, the contractor requirements include:\n\n"${chunk.text.substring(0, 320).replace(/\n+/g, ' ')}..."\n\nSource: [Page ${chunk.pageNumber}]`;
+      }
+    }
+    return 'I could not find this information in the relevant sections of the uploaded tender.';
+  }
+
+  // 5. Completion Duration
+  if (qLower.includes('duration') || qLower.includes('completion') || qLower.includes('period') || qLower.includes('time allowed')) {
+    for (const chunk of relevantChunks) {
+      const durationMatch = chunk.text.match(/(?:time\s*allowed|completion\s*period|duration|period\s*of\s*completion)[\s:=-]+([^\n\r.]+)/i)
+        || chunk.text.match(/\b\d+\s*(?:months?|days?|calendar\s*months?)\b/i);
+      if (durationMatch) {
+        return `According to Page ${chunk.pageNumber}, the project completion duration is:\n\n**${durationMatch[0].trim()}**\n\nSupporting excerpt:\n> "${chunk.text.substring(0, 250).replace(/\n+/g, ' ')}..."`;
+      }
+    }
+    return 'I could not find this information in the relevant sections of the uploaded tender.';
+  }
+
+  // 6. Contract Clauses
+  if (qLower.includes('clause') || qLower.includes('gcc') || qLower.includes('scc') || qLower.includes('liquidated') || qLower.includes('penalty') || qLower.includes('escalation')) {
+    for (const chunk of relevantChunks) {
+      if (/clause|gcc|scc|liquidat|penalt|escalat|damages|arbitrat/i.test(chunk.text)) {
+        return `Relevant contract clause provisions identified on Page ${chunk.pageNumber}:\n\n> "${chunk.text.substring(0, 350).replace(/\n+/g, ' ')}..."\n\n(Source: Page ${chunk.pageNumber} - General & Special Conditions of Contract).`;
+      }
+    }
+    return 'I could not find this information in the relevant sections of the uploaded tender.';
+  }
+
+  // 7. BOQ / Quantities
+  if (qLower.includes('boq') || qLower.includes('quantit') || qLower.includes('unit') || qLower.includes('schedule') || qLower.includes('item')) {
+    for (const chunk of relevantChunks) {
+      if (/boq|quantit|cum|sqm|unit|schedule|rate|item/i.test(chunk.text)) {
+        return `Bill of Quantities (BOQ) specifications and scope from Page ${chunk.pageNumber}:\n\n> "${chunk.text.substring(0, 350).replace(/\n+/g, ' ')}..."\n\n(Source: Page ${chunk.pageNumber} - Schedule of Quantities).`;
+      }
+    }
+    return 'I could not find this information in the relevant sections of the uploaded tender.';
+  }
+
+  // General grounded response with page citation only if score is meaningful
+  if (primaryChunk.score >= 4) {
+    return `Based on Page ${pageNo} of the uploaded tender document:\n\n> "${primaryText.substring(0, 350).replace(/\n+/g, ' ')}..."\n\n(Source: Page ${pageNo})`;
+  }
+
+  return 'I could not find this information in the relevant sections of the uploaded tender.';
 }
 
 /**
@@ -240,7 +361,7 @@ app.post('/api/extract-pdf', upload.single('file'), async (req, res) => {
  */
 app.post('/api/chat-with-tender', async (req, res) => {
   try {
-    const { question, tenderTitle, nitNumber, pages, rawText, history } = req.body;
+    const { question, tenderTitle, nitNumber, pages, rawText } = req.body;
 
     if (!question || typeof question !== 'string') {
       return res.status(400).json({ success: false, error: 'A question is required.' });
@@ -273,7 +394,6 @@ app.post('/api/chat-with-tender', async (req, res) => {
 
     // Take top 5 relevant chunks
     const topChunks = scoredChunks.slice(0, 5);
-    const hasStrongMatches = topChunks.some(c => c.score > 0);
 
     // Build context with page references
     const contextText = topChunks
@@ -312,7 +432,7 @@ ${contextText}
 User Question:
 ${question}`;
 
-    // 4. Try Gemini API
+    // 4. Try Gemini API if a valid key is provisioned
     const gemini = getGeminiClient();
     let aiAnswer = '';
 
@@ -325,20 +445,17 @@ ${question}`;
           ]
         });
 
-        aiAnswer = response.text || '';
-      } catch (geminiError: any) {
-        console.warn('Gemini API call failed, falling back to deterministic extraction:', geminiError?.message);
+        if (response && response.text) {
+          aiAnswer = response.text.trim();
+        }
+      } catch {
+        // Fall back gracefully to grounded extraction
       }
     }
 
-    // 5. Deterministic fallback if Gemini is unconfigured or failed
+    // 5. Deterministic civil-engineering RAG synthesis if Gemini is unconfigured or unavailable
     if (!aiAnswer) {
-      if (!hasStrongMatches) {
-        aiAnswer = 'I could not find this information in the relevant sections of the uploaded tender.';
-      } else {
-        const bestChunk = topChunks[0];
-        aiAnswer = `Based on the tender document on Page ${bestChunk.pageNumber}:\n\n"${bestChunk.text.substring(0, 400)}..."\n\n(Note: Generated via direct document index retrieval).`;
-      }
+      aiAnswer = synthesizeGroundedAnswer(question, topChunks, tenderTitle, nitNumber);
     }
 
     res.json({

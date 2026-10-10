@@ -140,6 +140,7 @@ export interface ChatSourceReference {
 export interface ChatMessage {
   id: string;
   tenderId: string;
+  ownerUid?: string;
   sender: 'user' | 'assistant';
   text: string;
   timestamp: string;

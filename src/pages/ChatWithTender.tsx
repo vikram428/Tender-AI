@@ -93,6 +93,12 @@ export const ChatWithTender: React.FC = () => {
       return;
     }
 
+    // Safety: only load messages for tenders owned by current user
+    if (activeTender && activeTender.ownerUid && activeTender.ownerUid !== user.uid) {
+      setMessages([]);
+      return;
+    }
+
     const messagesRef = collection(db, 'tenders', activeTenderId, 'messages');
     const q = query(messagesRef, orderBy('timestamp', 'asc'));
 
@@ -109,13 +115,12 @@ export const ChatWithTender: React.FC = () => {
         setMessages(loaded);
       },
       (err) => {
-        console.error('Error fetching chat messages:', err);
-        // Fallback: local session messages preserved
+        console.warn('Chat messages sync note:', err?.message);
       }
     );
 
     return () => unsubscribe();
-  }, [user, activeTenderId]);
+  }, [user, activeTenderId, activeTender]);
 
   // Send question to RAG pipeline
   const handleSendMessage = async (textToSend?: string) => {
@@ -134,6 +139,7 @@ export const ChatWithTender: React.FC = () => {
     const userMessage: ChatMessage = {
       id: userMessageId,
       tenderId: activeTender.id,
+      ownerUid: user?.uid,
       sender: 'user',
       text: question,
       timestamp: new Date().toISOString()
@@ -146,7 +152,7 @@ export const ChatWithTender: React.FC = () => {
     if (user) {
       const userMsgRef = doc(db, 'tenders', activeTender.id, 'messages', userMessageId);
       setDoc(userMsgRef, userMessage).catch((err) => {
-        console.warn('Failed to persist user message in Firestore:', err);
+        console.warn('Failed to persist user message in Firestore:', err?.message);
       });
     }
 
@@ -175,6 +181,7 @@ export const ChatWithTender: React.FC = () => {
       const aiMessage: ChatMessage = {
         id: aiMessageId,
         tenderId: activeTender.id,
+        ownerUid: user?.uid,
         sender: 'assistant',
         text: data.answer || 'I could not find this information in the relevant sections of the uploaded tender.',
         timestamp: new Date().toISOString(),
@@ -189,7 +196,7 @@ export const ChatWithTender: React.FC = () => {
       if (user) {
         const aiMsgRef = doc(db, 'tenders', activeTender.id, 'messages', aiMessageId);
         setDoc(aiMsgRef, aiMessage).catch((err) => {
-          console.warn('Failed to persist assistant message in Firestore:', err);
+          console.warn('Failed to persist assistant message in Firestore:', err?.message);
         });
       }
     } catch (err: any) {
